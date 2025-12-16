@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hatzalah Location Finder</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Inter font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f7f9fc;
+    }
+    .card {
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    .btn-primary {
+      background-color: #d90000;
+    }
+    .btn-primary:hover {
+      background-color: #b30000;
+    }
+    .loading-spinner {
+      border-top-color: #d90000;
+      border-left-color: #d90000;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4">
+
+<div class="w-full max-w-lg">
+  <div class="card bg-white p-6 rounded-2xl text-center">
+
+    <h1 class="text-3xl font-extrabold text-gray-800 mb-2">
+      Hatzalah Finder
+    </h1>
+
+    <p class="text-sm text-gray-500 mb-6">
+      Find the closest Hatzalah emergency number based on your location.
+    </p>
+
+    <!-- Button -->
+    <button
+      id="findBtn"
+      class="btn-primary w-full py-4 text-white font-bold rounded-xl text-lg shadow-lg">
+      FIND MY HATZALAH NUMBER
+    </button>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden mt-6">
+      <div class="loading-spinner w-8 h-8 border-4 border-gray-200 rounded-full mx-auto mb-2"></div>
+      <p class="text-gray-600 text-sm">Finding your location…</p>
+    </div>
+
+    <!-- Result -->
+    <div id="result" class="hidden mt-6 p-5 bg-red-50 border-4 border-red-200 rounded-xl">
+      <p class="text-sm font-semibold text-gray-700 mb-1">
+        Closest chapter:
+      </p>
+      <h2 id="locationName" class="text-xl font-bold text-gray-900 mb-3"></h2>
+
+      <p class="text-sm font-semibold text-gray-700">
+        EMERGENCY NUMBER
+      </p>
+      <a id="phoneLink"
+         class="block text-4xl font-extrabold text-red-700 mt-1"
+         href="#">
+      </a>
+    </div>
+
+    <!-- Message -->
+    <p id="message" class="mt-4 text-sm"></p>
+
+    <p class="mt-6 text-xs text-gray-400">
+      Always call 911 in a life-threatening emergency.
+    </p>
+
+  </div>
+</div>
+
+<script>
+/* ===========================
+   HATZALAH DATABASE
+=========================== */
+const HATZALAH_LOCATIONS = [
+  { name: "Central Hatzalah (NYC)", lat: 40.7128, lon: -74.0060, number: "718-230-1000" },
+  { name: "Lakewood / NJ Shore", lat: 40.0984, lon: -74.2096, number: "732-531-9988" },
+  { name: "North Jersey", lat: 40.7834, lon: -74.2965, number: "973-910-1884" },
+  { name: "Chicago Hatzalah", lat: 41.9056, lon: -87.7013, number: "847-504-1500" },
+  { name: "South Florida Hatzalah", lat: 25.7617, lon: -80.1918, number: "305-919-4900" },
+  { name: "Los Angeles Hatzalah", lat: 34.0522, lon: -118.2437, number: "323-655-4000" }
+];
+
+const R = 6371;
+
+/* ===========================
+   HELPERS
+=========================== */
+function deg2rad(deg) {
+  return deg * (Math.PI / 180);
+}
+
+function distance(lat1, lon1, lat2, lon2) {
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(deg2rad(lat1)) *
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon/2)**2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function closestHatzalah(lat, lon) {
+  let closest = null;
+  let min = Infinity;
+  for (const loc of HATZALAH_LOCATIONS) {
+    const d = distance(lat, lon, loc.lat, loc.lon);
+    if (d < min) {
+      min = d;
+      closest = loc;
+    }
+  }
+  return closest;
+}
+
+/* ===========================
+   UI ELEMENTS
+=========================== */
+const btn = document.getElementById("findBtn");
+const loading = document.getElementById("loading");
+const result = document.getElementById("result");
+const locationName = document.getElementById("locationName");
+const phoneLink = document.getElementById("phoneLink");
+const message = document.getElementById("message");
+
+/* ===========================
+   MAIN LOGIC
+=========================== */
+btn.addEventListener("click", () => {
+
+  message.textContent = "";
+  result.classList.add("hidden");
+  loading.classList.remove("hidden");
+
+  if (!navigator.geolocation) {
+    showFallback("Geolocation not supported.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      loading.classList.add("hidden");
+
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const acc = (pos.coords.accuracy * 0.000621371).toFixed(1);
+
+      const closest = closestHatzalah(lat, lon);
+      const tel = closest.number.replace(/-/g,"");
+
+      locationName.textContent = closest.name;
+      phoneLink.textContent = closest.number;
+      phoneLink.href = `tel:${tel}`;
+
+      message.textContent = `Location accurate within ~${acc} miles`;
+      message.className = "mt-4 text-sm text-green-600";
+
+      result.classList.remove("hidden");
+    },
+    err => {
+      showFallback("Location permission denied or unavailable.");
+    },
+    {
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: 60000
+    }
+  );
+});
+
+function showFallback(reason) {
+  loading.classList.add("hidden");
+
+  const fallback = HATZALAH_LOCATIONS[0];
+  locationName.textContent = "General Hatzalah";
+  phoneLink.textContent = fallback.number;
+  phoneLink.href = `tel:${fallback.number.replace(/-/g,"")}`;
+
+  message.textContent = reason + " Showing general number.";
+  message.className = "mt-4 text-sm text-red-600";
+
+  result.classList.remove("hidden");
+}
+</script>
+
+</body>
+</html>
